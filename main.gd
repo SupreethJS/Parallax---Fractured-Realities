@@ -41,7 +41,10 @@ func _setup_title_screen() -> void:
 	# 2. Camera for Title Menu Parallax motion
 	menu_camera = Camera2D.new()
 	menu_camera.name = "MenuCamera"
-	menu_camera.position = Vector2(576, 324)
+	var vp_size: Vector2 = get_viewport_rect().size
+	if vp_size.x <= 0.0 or vp_size.y <= 0.0:
+		vp_size = Vector2(1152, 648)
+	menu_camera.position = vp_size * 0.5
 	add_child(menu_camera)
 
 	# 3. Canvas Layer for Title UI

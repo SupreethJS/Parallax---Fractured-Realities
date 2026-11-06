@@ -3,7 +3,6 @@
 /android/
 
 # Godot generated files
-.godot/
 .export/
 
 # Backup files
@@ -11,3 +10,6 @@
 *.backup
 *.backup_*
 dev.backup.js
+
+# Archives
+*.zip

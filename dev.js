@@ -50,13 +50,15 @@ const server = http.createServer((req, res) => {
     reqPath = '/index.html';
   }
 
-  const isGodot = (queryString && queryString.includes('mode=godot')) || reqPath.startsWith('/godot');
-  let filePath = isGodot ? path.join(WEB_BUILD_DIR, reqPath.replace(/^\/godot/, '') || 'index.html') : path.join(ROOT, reqPath);
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-    const fallbackPath = path.join(ROOT, reqPath);
-    if (fs.existsSync(fallbackPath) && fs.statSync(fallbackPath).isFile()) {
-      filePath = fallbackPath;
-    }
+  // Prioritize web build directory for exported Godot files (index.html, index.js, index.wasm, index.pck, etc.)
+  const cleanGodotPath = reqPath.replace(/^\/godot/, '') || '/index.html';
+  const webBuildPath = path.join(WEB_BUILD_DIR, cleanGodotPath);
+  let filePath;
+
+  if (fs.existsSync(webBuildPath) && fs.statSync(webBuildPath).isFile()) {
+    filePath = webBuildPath;
+  } else {
+    filePath = path.join(ROOT, reqPath);
   }
 
   // Prevent directory traversal

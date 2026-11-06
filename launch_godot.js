@@ -1,11 +1,16 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const candidates = [
+  process.env.GODOT_PATH,
+  'C:\\Godot_v4.7.2-stable_win64.exe',
+  'C:\\Godot_v4.7.2-stable_win64_console.exe',
+  path.join(os.homedir(), 'Desktop', 'Godot_v4.7.2-stable_win64.exe'),
+  path.join(os.homedir(), 'OneDrive', 'Desktop', 'Godot_v4.7.2-stable_win64.exe'),
   'C:\\Users\\Admin\\OneDrive\\Desktop\\Godot_v4.7.2-stable_win64.exe\\Godot_v4.7.2-stable_win64.exe',
   'C:\\Users\\Admin\\OneDrive\\Desktop\\Godot_v4.7.2-stable_win64.exe\\Godot_v4.7.2-stable_win64_console.exe',
-  process.env.GODOT_PATH,
   'godot'
 ].filter(Boolean);
 

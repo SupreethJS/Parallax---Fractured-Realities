@@ -262,6 +262,16 @@
       transition: opacity 0.3s;
     }
     .checkpoint-toast.show { opacity: 1; }
+    .checkpoint-toast.link-established {
+      top: 76px;
+      color: #f8fafc;
+      background: rgba(7, 12, 24, 0.96);
+      border: 2px solid var(--link-color, #06b6d4);
+      font-size: 1rem;
+      padding: 9px 22px;
+      box-shadow: 0 0 22px color-mix(in srgb, var(--link-color, #06b6d4) 55%, transparent);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    }
 
     .controls-bar {
       width: 100%;
@@ -771,6 +781,20 @@
         osc.connect(gain); gain.connect(this.ctx.destination);
         osc.start(now); osc.stop(now + 0.36);
       }
+      playLinkedAction() {
+        if (this.muted || !this.ctx) return;
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.24);
+        gain.gain.setValueAtTime(0.24, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.start(now); osc.stop(now + 0.29);
+      }
       playDeath() {
         if (this.muted || !this.ctx) return;
         const now = this.ctx.currentTime;
@@ -807,6 +831,11 @@
     const CHAMBER_03_COVER_X = 2300;
     const CHAMBER_04_START_X = 2900;
     let chamber03Complete = false;
+    let coopReceiverLatched = false;
+    let p1ExitReached = false;
+    let p2ExitReached = false;
+    let coopRiftPulse = 0;
+    let coopRiftColor = '#06b6d4';
 
     function toggleReality() {
       if (gameMode === 'multiplayer') {
@@ -846,6 +875,8 @@
     const VH = 648;
 
     let cameraX = 0;
+    let p1CameraX = 0;
+    let p2CameraX = 0;
     const keys = {};
 
     window.addEventListener('keydown', e => {
@@ -874,10 +905,15 @@
         }
       }
 
-      if (key === 'q') toggleReality();
+      if (key === 'q') {
+        if (gameMode === 'single') toggleReality();
+      }
       if (key === 'r') resetGame();
       if (key === 'e') {
         rotateNearestMirror();
+      }
+      if (key === 'escape') {
+        toggleTitleMenu();
       }
     });
 
@@ -920,25 +956,31 @@
         this.vx = 0; this.vy = 0;
         audio.playDeath();
 
-        const title = document.getElementById('deathTitle');
-        const msg = document.getElementById('deathMsg');
-        title.textContent = 'GAME OVER';
+        if (gameMode === 'single') {
+          const title = document.getElementById('deathTitle');
+          const msg = document.getElementById('deathMsg');
+          title.textContent = 'GAME OVER';
 
-        const pLabel = (gameMode === 'multiplayer')
-          ? (this.id === 'p1' ? 'Player 1 [World A / Cyan]' : 'Player 2 [World B / Magenta]')
-          : 'You';
+          if (reason === 'abyss') {
+            msg.textContent = 'You fell into the containment abyss.';
+          } else if (reason === 'burning_laser') {
+            msg.textContent = 'You were vaporized by a lethal burning laser.';
+          } else if (reason === 'drone_attack') {
+            msg.textContent = 'You were detected and neutralized by automated defense drones.';
+          } else {
+            msg.textContent = 'Destroyed by facility defense systems.';
+          }
 
-        if (reason === 'abyss') {
-          msg.textContent = `${pLabel} fell into the containment abyss.`;
-        } else if (reason === 'burning_laser') {
-          msg.textContent = `${pLabel} was vaporized by a lethal burning laser.`;
-        } else if (reason === 'drone_attack') {
-          msg.textContent = `${pLabel} was detected and neutralized by automated defense drones.`;
+          document.getElementById('deathModal').classList.add('active');
         } else {
-          msg.textContent = `${pLabel} was destroyed by facility defense systems.`;
+          // In multiplayer: isolated respawn without interrupting or resetting the other operative
+          const targetCp = (this.id === 'p1') ? p1Checkpoint : p2Checkpoint;
+          setTimeout(() => {
+            if (this.isDying) {
+              this.respawn(targetCp);
+            }
+          }, 1200);
         }
-
-        document.getElementById('deathModal').classList.add('active');
 
         // Spawn disintegration embers in player's world color
         this.particles = [];
@@ -959,8 +1001,9 @@
         if (gameMode === 'multiplayer') {
           spawnOffset = (this.id === 'p1') ? -24 : 24;
         }
-        this.x = checkpoint.x + spawnOffset;
-        this.y = checkpoint.y;
+        const cp = checkpoint || checkpoints[0];
+        this.x = cp.x + spawnOffset;
+        this.y = cp.y;
         this.vx = 0; this.vy = 0;
         this.onGround = false;
         this.coyote = 0;
@@ -1137,10 +1180,12 @@
     class ShiftableBlock {
       constructor(x, y, w, h, reality) {
         this.x = x; this.y = y; this.w = w; this.h = h; this.reality = reality;
+        this.linkedActive = true;
+        this.linkedFeedbackUntil = 0;
       }
+      setLinkedActive(active) { this.linkedActive = active; }
       isActive() {
-        if (gameMode === 'multiplayer') return true;
-        return currentReality === this.reality;
+        return this.linkedActive && (gameMode === 'multiplayer' || currentReality === this.reality);
       }
       getBounds() {
         return { left: this.x - this.w / 2, right: this.x + this.w / 2, top: this.y - this.h / 2, bottom: this.y + this.h / 2 };
@@ -1182,6 +1227,17 @@
           ctx.lineWidth = 1.5;
           ctx.strokeRect(b.left, b.top, this.w, this.h);
         }
+        const feedbackRemaining = Math.max(0, this.linkedFeedbackUntil - performance.now());
+        if (feedbackRemaining > 0) {
+          const pulse = 0.72 + 0.28 * Math.sin(performance.now() * 0.018);
+          ctx.shadowColor = col;
+          ctx.shadowBlur = 14 * pulse;
+          ctx.strokeStyle = col;
+          ctx.globalAlpha = Math.min(1, feedbackRemaining / 500) * pulse;
+          ctx.lineWidth = 4;
+          ctx.strokeRect(b.left - 5, b.top - 5, this.w + 10, this.h + 10);
+          ctx.shadowBlur = 0;
+        }
         ctx.restore();
       }
     }
@@ -1219,13 +1275,7 @@
 
         if (onPlate && !this.isPressed) {
           this.isPressed = true;
-          audio.playCheckpoint();
-          const toast = document.getElementById('checkpointToast');
-          if (toast) {
-            toast.textContent = `SYNC TERMINAL ${this.label} ONLINE`;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 1800);
-          }
+          onCooperativeSwitchActivated(this);
         }
 
         const target = this.isPressed ? 1.0 : 0.0;
@@ -1344,8 +1394,8 @@
 
     // Security Door
     class Door {
-      constructor(x, y, w, h) {
-        this.x = x; this.y = y; this.w = w; this.h = h; this.isOpen = false; this.progress = 0;
+      constructor(x, y, w, h, reality = null) {
+        this.x = x; this.y = y; this.w = w; this.h = h; this.reality = reality; this.isOpen = false; this.progress = 0;
       }
       setOpen(open) { this.isOpen = open; }
       update() {
@@ -1526,6 +1576,7 @@
     let doors = [];
     let drones = [];
     let coopSwitches = [];
+    let cooperativeBarriers = [];
     let player = null;
     let player1 = null;
     let player2 = null;
@@ -1537,6 +1588,8 @@
       { x: 2940, y: 480 }
     ];
     let currentCheckpoint = checkpoints[0];
+    let p1Checkpoint = checkpoints[0];
+    let p2Checkpoint = checkpoints[0];
 
     function buildWorld() {
       walls = [
@@ -1569,26 +1622,43 @@
         // Chamber 1: Cyan A vs Magenta B platforms
         new ShiftableBlock(380, 430, 110, 22, Reality.A),
         new ShiftableBlock(560, 370, 110, 22, Reality.B),
+        new ShiftableBlock(720, 470, 110, 20, Reality.A),
+        new ShiftableBlock(730, 420, 130, 20, Reality.B),
 
-        // Chamber 2: Laser blocker in Reality A
+        // Chamber 2: each operative can phase out the other reality's optical blocker
         new ShiftableBlock(1060, 360, 36, 140, Reality.A),
+        new ShiftableBlock(1060, 360, 36, 140, Reality.B),
 
         // Chamber 3: Cover wall in Reality B
         new ShiftableBlock(2300, 360, 36, 160, Reality.B),
+        new ShiftableBlock(2120, 470, 110, 20, Reality.A),
+        new ShiftableBlock(2510, 450, 110, 20, Reality.B),
 
         // Chamber 4: Reactor Bridges
         new ShiftableBlock(3240, 440, 120, 22, Reality.A),
         new ShiftableBlock(3520, 400, 120, 22, Reality.B)
       ];
+      cooperativeBarriers = [
+        shiftables.find(s => s.reality === Reality.A && s.x === 1060),
+        shiftables.find(s => s.reality === Reality.B && s.x === 1060)
+      ];
 
       mirrors = [new LaserMirror(1240, 360, 90)];
       receivers = [new LaserReceiver(1240, 140)];
-      doors = [new Door(1740, 480, 28, 110)];
+      doors = gameMode === 'multiplayer'
+        ? [new Door(1740, 310, 28, 520, Reality.A), new Door(1740, 310, 28, 520, Reality.B)]
+        : [new Door(1740, 480, 28, 110)];
       drones = [new SecurityDrone(2360, 320, 160)];
+      coopReceiverLatched = false;
+      p1ExitReached = false;
+      p2ExitReached = false;
+      coopRiftPulse = 0;
 
       if (gameMode === 'multiplayer') {
-        player1 = new Player(currentCheckpoint.x - 24, currentCheckpoint.y, 'p1', Reality.A, 'wasd');
-        player2 = new Player(currentCheckpoint.x + 24, currentCheckpoint.y, 'p2', Reality.B, 'arrows');
+        p1Checkpoint = p1Checkpoint || currentCheckpoint;
+        p2Checkpoint = p2Checkpoint || currentCheckpoint;
+        player1 = new Player(p1Checkpoint.x - 24, p1Checkpoint.y, 'p1', Reality.A, 'wasd');
+        player2 = new Player(p2Checkpoint.x + 24, p2Checkpoint.y, 'p2', Reality.B, 'arrows');
         player = player1;
 
         // Two cooperative synchronization switches
@@ -1602,6 +1672,34 @@
         player2 = null;
         coopSwitches = [];
       }
+    }
+
+    function onCooperativeSwitchActivated(sourceSwitch) {
+      if (gameMode !== 'multiplayer') return;
+      const switchIndex = coopSwitches.indexOf(sourceSwitch);
+      if (switchIndex < 0) return;
+      const linkedBarrier = switchIndex === 0 ? cooperativeBarriers[1] : cooperativeBarriers[0];
+      if (!linkedBarrier || !linkedBarrier.linkedActive) return;
+      linkedBarrier.setLinkedActive(false);
+      linkedBarrier.linkedFeedbackUntil = performance.now() + 1500;
+      coopRiftPulse = 1;
+      coopRiftColor = sourceSwitch.reality === Reality.A ? '#06b6d4' : '#f43f5e';
+      audio.playLinkedAction();
+      showCooperativeToast('REALITY LINK ESTABLISHED', 1500, sourceSwitch.reality);
+    }
+
+    function showCooperativeToast(message, duration = 2200, reality = null) {
+      const toast = document.getElementById('checkpointToast');
+      if (!toast) return;
+      toast.classList.remove('link-established');
+      toast.style.removeProperty('--link-color');
+      if (reality !== null) {
+        toast.classList.add('link-established');
+        toast.style.setProperty('--link-color', reality === Reality.A ? '#06b6d4' : '#f43f5e');
+      }
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show', 'link-established'), duration);
     }
 
     function rotateNearestMirror() {
@@ -1653,8 +1751,8 @@
 
     function respawnAtCheckpoint() {
       if (gameMode === 'multiplayer') {
-        if (player1) player1.respawn(currentCheckpoint);
-        if (player2) player2.respawn(currentCheckpoint);
+        if (player1 && player1.isDying) player1.respawn(p1Checkpoint);
+        if (player2 && player2.isDying) player2.respawn(p2Checkpoint);
       } else {
         if (player) player.respawn(currentCheckpoint);
       }
@@ -1714,9 +1812,13 @@
       chamber03Complete = false;
       currentReality = Reality.A;
       cameraX = 0;
+      p1CameraX = 0;
+      p2CameraX = 0;
+      currentCheckpoint = checkpoints[0];
+      p1Checkpoint = checkpoints[0];
+      p2Checkpoint = checkpoints[0];
       updateRealityUI();
       buildWorld();
-      currentCheckpoint = checkpoints[0];
       document.getElementById('victoryModal').classList.remove('active');
       document.getElementById('deathModal').classList.remove('active');
     }
@@ -1761,29 +1863,46 @@
       // 1. Check Checkpoints
       for (let i = 0; i < checkpoints.length; i++) {
         const cp = checkpoints[i];
-        let reached = false;
-
         if (gameMode === 'multiplayer') {
-          const p1Near = player1 && Math.abs(player1.x - cp.x) < 48 && Math.abs(player1.y - cp.y) < 70;
-          const p2Near = player2 && Math.abs(player2.x - cp.x) < 48 && Math.abs(player2.y - cp.y) < 70;
-          reached = p1Near || p2Near;
+          if (player1 && Math.abs(player1.x - cp.x) < 48 && Math.abs(player1.y - cp.y) < 70 && p1Checkpoint !== cp) {
+            p1Checkpoint = cp;
+            const toast = document.getElementById('checkpointToast');
+            toast.textContent = `P1 CHECKPOINT 0${i + 1} ACTIVATED`;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+            audio.playCheckpoint();
+          }
+          if (player2 && Math.abs(player2.x - cp.x) < 48 && Math.abs(player2.y - cp.y) < 70 && p2Checkpoint !== cp) {
+            p2Checkpoint = cp;
+            const toast = document.getElementById('checkpointToast');
+            toast.textContent = `P2 CHECKPOINT 0${i + 1} ACTIVATED`;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+            audio.playCheckpoint();
+          }
         } else {
-          reached = player && Math.abs(player.x - cp.x) < 48 && Math.abs(player.y - cp.y) < 70;
-        }
-
-        if (reached && currentCheckpoint !== cp) {
-          currentCheckpoint = cp;
-          const toast = document.getElementById('checkpointToast');
-          toast.textContent = `CHECKPOINT 0${i + 1} ACTIVATED`;
-          toast.classList.add('show');
-          setTimeout(() => toast.classList.remove('show'), 2000);
-          audio.playCheckpoint();
+          if (player && Math.abs(player.x - cp.x) < 48 && Math.abs(player.y - cp.y) < 70 && currentCheckpoint !== cp) {
+            currentCheckpoint = cp;
+            const toast = document.getElementById('checkpointToast');
+            toast.textContent = `CHECKPOINT 0${i + 1} ACTIVATED`;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+            audio.playCheckpoint();
+          }
         }
       }
 
       // 2. Check Victory Condition
       if (gameMode === 'multiplayer') {
-        if (player1 && player2 && player1.x > 3700 && player2.x > 3700 && doors[0].isOpen) {
+        if (!p1ExitReached && player1 && !player1.isDying && player1.x > 3700 && doors[0].isOpen) {
+          p1ExitReached = true;
+          showCooperativeToast('P1 EXIT READY — WAITING FOR P2');
+        }
+        if (!p2ExitReached && player2 && !player2.isDying && player2.x > 3700 && doors[1].isOpen) {
+          p2ExitReached = true;
+          showCooperativeToast('P2 EXIT READY — WAITING FOR P1');
+        }
+        if (p1ExitReached && p2ExitReached) {
           document.getElementById('victoryModal').classList.add('active');
         }
       } else {
@@ -1799,13 +1918,13 @@
       if (gameMode === 'multiplayer') {
         // Player 1 collides with Shared Walls, Closed Doors, and World A platforms
         const solidsP1 = [...walls];
-        for (const s of shiftables) if (s.reality === Reality.A) solidsP1.push(s);
-        for (const d of doors) if (d.isSolid()) solidsP1.push(d);
+        for (const s of shiftables) if (s.reality === Reality.A && s.isActive()) solidsP1.push(s);
+        for (const d of doors) if (d.reality === Reality.A && d.isSolid()) solidsP1.push(d);
 
         // Player 2 collides with Shared Walls, Closed Doors, and World B platforms
         const solidsP2 = [...walls];
-        for (const s of shiftables) if (s.reality === Reality.B) solidsP2.push(s);
-        for (const d of doors) if (d.isSolid()) solidsP2.push(d);
+        for (const s of shiftables) if (s.reality === Reality.B && s.isActive()) solidsP2.push(s);
+        for (const d of doors) if (d.reality === Reality.B && d.isSolid()) solidsP2.push(d);
 
         // Chamber 3 barrier until stealth breach complete
         if (!chamber03Complete) {
@@ -1818,8 +1937,8 @@
 
         const prevP1X = player1.x;
         const prevP2X = player2.x;
-        player1.update(solidsP1, currentCheckpoint);
-        player2.update(solidsP2, currentCheckpoint);
+        player1.update(solidsP1, p1Checkpoint);
+        player2.update(solidsP2, p2Checkpoint);
 
         // Cooperative sync switches
         if (coopSwitches.length >= 2) {
@@ -1858,7 +1977,12 @@
       const opt = lasers[0];
       let optEndX = 1800;
       const allActiveSolids = [...walls];
-      for (const s of shiftables) if (s.isActive()) allActiveSolids.push(s);
+      if (gameMode === 'multiplayer') {
+        // In multiplayer, mirror is reachable in World B where blocker is phased out
+        for (const s of shiftables) if (s.reality === Reality.A && s.isActive()) allActiveSolids.push(s);
+      } else {
+        for (const s of shiftables) if (s.isActive()) allActiveSolids.push(s);
+      }
 
       for (const s of allActiveSolids) {
         const b = s.getBounds();
@@ -1927,11 +2051,12 @@
       }
 
       // Door 0 Opening Logic:
-      // In Single Player: opened by optical laser power.
-      // In Multiplayer: opened when BOTH Switch A and Switch B are synchronized OR laser is powered!
       if (gameMode === 'multiplayer') {
-        const coopUnlocked = coopSwitches.length >= 2 && coopSwitches[0].isPressed && coopSwitches[1].isPressed;
-        doors[0].setOpen(coopUnlocked || receivers[0].isPowered);
+        coopReceiverLatched = coopReceiverLatched || receivers[0].isPowered;
+        const switchAActive = coopSwitches.length >= 2 && coopSwitches[0].isPressed;
+        const switchBActive = coopSwitches.length >= 2 && coopSwitches[1].isPressed;
+        doors[0].setOpen(switchBActive && coopReceiverLatched);
+        doors[1].setOpen(switchAActive && switchBActive);
       } else {
         doors[0].setOpen(receivers[0].isPowered);
       }
@@ -1971,42 +2096,43 @@
 
       // 6. Camera Follow
       if (gameMode === 'multiplayer') {
-        const p1x = player1 ? player1.x : 0;
-        const p2x = player2 ? player2.x : 0;
-        const midpointX = (p1x + p2x) / 2;
-        cameraX += (midpointX - VW / 2 - cameraX) * 0.08;
+        const HW = VW / 2;
+        const targetP1CamX = Math.max(0, Math.min(3900 - HW, (player1 ? player1.x : 0) - HW * 0.4));
+        const targetP2CamX = Math.max(0, Math.min(3900 - HW, (player2 ? player2.x : 0) - HW * 0.4));
+        p1CameraX += (targetP1CamX - p1CameraX) * 0.12;
+        p2CameraX += (targetP2CamX - p2CameraX) * 0.12;
       } else {
-        cameraX += (player.x - VW / 2 - cameraX) * 0.08;
+        const targetCamX = Math.max(0, Math.min(3900 - VW, (player ? player.x : 0) - VW * 0.38));
+        cameraX += (targetCamX - cameraX) * 0.08;
       }
-      cameraX = Math.max(0, Math.min(cameraX, 3900 - VW));
 
       // 7. Dynamic Objective Update
       const objTitle = document.getElementById('hudChamber');
       const objText = document.getElementById('hudObjective');
-      const focusX = (gameMode === 'multiplayer') ? (player1.x + player2.x) / 2 : player.x;
+      const focusX = (gameMode === 'multiplayer') ? ((player1 ? player1.x : 0) + (player2 ? player2.x : 0)) / 2 : (player ? player.x : 0);
 
       if (gameMode === 'multiplayer') {
         if (focusX < 800) {
           objTitle.textContent = 'CHAMBER 01: DUAL CALIBRATION';
-          objText.textContent = '• P1 [Cyan/WASD] & P2 [Magenta/Arrows] progress through parallel routes';
+          objText.textContent = '• P2 relay materializes P1’s Reality A bridge; retain progress through respawn';
         } else if (focusX < 1800) {
           objTitle.textContent = 'CHAMBER 02: COOPERATIVE MATRIX';
-          objText.textContent = '• P1 activate Switch A [Cyan] & P2 activate Switch B [Magenta] to open Blast Door';
+          objText.textContent = '• Each console clears the other reality’s beam barrier; align the mirror and reach both gates';
         } else if (focusX < CHAMBER_04_START_X) {
           objTitle.textContent = 'CHAMBER 03: SURVEILLANCE TRENCH';
-          objText.textContent = '• P2 [World B] use stealth cover wall [2300] to bypass defense drone';
+          objText.textContent = '• Coordinate the World B stealth cover, then open each other’s reactor gate';
         } else {
           objTitle.textContent = 'CHAMBER 04: CORE REACTOR VAULT';
-          objText.textContent = '• Coordinate dual-reality platforms to breach the Core Terminal together';
+          objText.textContent = '• Both operatives must enter their own transit gate to complete the campaign';
         }
       } else {
-        if (player.x < 800) {
+        if (player && player.x < 800) {
           objTitle.textContent = 'CHAMBER 01: DIMENSIONAL CALIBRATION';
           objText.textContent = '• Master momentum & Phase Shift [Q] across chasms';
-        } else if (player.x < 1800) {
+        } else if (player && player.x < 1800) {
           objTitle.textContent = 'CHAMBER 02: OPTICAL MATRIX & MIRRORS';
           objText.textContent = '• Blue laser is safe! Deflect via mirror [E]. Avoid red burning lasers.';
-        } else if (player.x < CHAMBER_04_START_X) {
+        } else if (player && player.x < CHAMBER_04_START_X) {
           objTitle.textContent = 'CHAMBER 03: SURVEILLANCE TRENCH';
           objText.textContent = '• Switch to Reality B [Magenta] and pass the drone behind the cover wall';
         } else {
@@ -2018,7 +2144,7 @@
       // Floating Mirror Prompt positioning
       const refPlayer = (gameMode === 'multiplayer') ? (player1 || player2) : player;
       const distToMirror = refPlayer ? Math.hypot(refPlayer.x - m.x, refPlayer.y - m.y) : 9999;
-      if (distToMirror < 500) {
+      if (gameMode === 'single' && distToMirror < 500) {
         const screenX = ((m.x - cameraX) / VW) * 100;
         const screenY = ((m.y - 35) / VH) * 100;
         mirrorPrompt.style.left = `${screenX}%`;
@@ -2029,178 +2155,292 @@
         mirrorPrompt.style.display = 'none';
       }
 
-      // 8. Render Parallax Environment Layers
-      const targetBlend = (gameMode === 'multiplayer') ? 0.5 : (currentReality === Reality.A ? 0.0 : 1.0);
-      realityBlend += (targetBlend - realityBlend) * 0.08;
-
-      // Deep Cosmic Sky
-      if (bgImages.sky.complete && bgImages.sky.naturalWidth > 0) {
-        ctx.drawImage(bgImages.sky, 0, 0, VW, VH);
-      } else {
-        ctx.fillStyle = currentReality === Reality.A ? '#050912' : '#0d0408';
-        ctx.fillRect(0, 0, VW, VH);
-      }
-
-      // Celestial Bodies: In Multiplayer, BOTH Moon (World A) and Rift (World B) appear simultaneously!
-      const celestialX = 820 - (cameraX * 0.02) % VW;
-      const celestialY = 160;
-
-      if (gameMode === 'multiplayer') {
-        // Celestial Moon (World A / Cyan)
-        if (bgImages.moon.complete && bgImages.moon.naturalWidth > 0) {
-          ctx.save();
-          ctx.globalAlpha = 0.85;
-          ctx.drawImage(bgImages.moon, celestialX - 180, celestialY - 120, 220, 220);
-          ctx.restore();
-        }
-        // Dimensional Rift (World B / Magenta)
-        if (bgImages.rift.complete && bgImages.rift.naturalWidth > 0) {
-          ctx.save();
-          ctx.globalAlpha = 0.85;
-          ctx.drawImage(bgImages.rift, celestialX + 60, celestialY - 130, 250, 250);
-          ctx.restore();
-        }
-      } else {
-        if (bgImages.moon.complete && bgImages.moon.naturalWidth > 0 && (1.0 - realityBlend) > 0.01) {
-          ctx.save();
-          ctx.globalAlpha = 1.0 - realityBlend;
-          ctx.drawImage(bgImages.moon, celestialX - 120, celestialY - 120, 240, 240);
-          ctx.restore();
-        }
-        if (bgImages.rift.complete && bgImages.rift.naturalWidth > 0 && realityBlend > 0.01) {
-          ctx.save();
-          ctx.globalAlpha = realityBlend;
-          ctx.drawImage(bgImages.rift, celestialX - 140, celestialY - 140, 280, 280);
-          ctx.restore();
-        }
-      }
-
-      // Parallax Tiling Helper
-      function drawParallax(img, scrollFactor, yOff = 0, alpha = 1.0) {
-        if (!img.complete || img.naturalWidth <= 0) return;
+      // Viewport Renderer Helper (reused by both Single-Player and Split-Screen Multiplayer)
+      function renderViewport(viewX, viewY, viewW, viewH, activeReality, targetPlayer, otherPlayer, camOffset) {
         ctx.save();
-        ctx.globalAlpha = alpha;
-        const layerW = 1152;
-        const layerH = 648;
-        const offX = -(cameraX * scrollFactor) % layerW;
-        for (let x = offX - layerW; x < VW + layerW; x += layerW) {
-          ctx.drawImage(img, x, yOff, layerW, layerH);
+        ctx.beginPath();
+        ctx.rect(viewX, viewY, viewW, viewH);
+        ctx.clip();
+        ctx.translate(viewX, viewY);
+
+        // Deep Cosmic Sky
+        if (bgImages.sky.complete && bgImages.sky.naturalWidth > 0) {
+          ctx.drawImage(bgImages.sky, 0, 0, viewW, viewH);
+        } else {
+          ctx.fillStyle = activeReality === Reality.A ? '#050912' : '#0d0408';
+          ctx.fillRect(0, 0, viewW, viewH);
+        }
+
+        // Celestial Body
+        const celestialX = (viewW > 800 ? 820 : 380) - (camOffset * 0.02) % viewW;
+        const celestialY = 160;
+        if (activeReality === Reality.A) {
+          if (bgImages.moon.complete && bgImages.moon.naturalWidth > 0) {
+            ctx.save();
+            ctx.globalAlpha = 0.95;
+            ctx.drawImage(bgImages.moon, celestialX - 110, celestialY - 110, 220, 220);
+            ctx.restore();
+          }
+        } else {
+          if (bgImages.rift.complete && bgImages.rift.naturalWidth > 0) {
+            ctx.save();
+            ctx.globalAlpha = 0.95;
+            ctx.drawImage(bgImages.rift, celestialX - 120, celestialY - 120, 240, 240);
+            ctx.restore();
+          }
+        }
+
+        // Parallax Tiling Helper
+        function drawParallax(img, scrollFactor, yOff = 0, alpha = 1.0) {
+          if (!img.complete || img.naturalWidth <= 0) return;
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          const layerW = 1152;
+          const layerH = 648;
+          const offX = -(camOffset * scrollFactor) % layerW;
+          for (let x = offX - layerW; x < viewW + layerW; x += layerW) {
+            ctx.drawImage(img, x, yOff, layerW, layerH);
+          }
+          ctx.restore();
+        }
+
+        drawParallax(bgImages.mountains, 0.08, 0, 0.90);
+        drawParallax(bgImages.facility, 0.22, 0, 0.95);
+        drawParallax(bgImages.near, 0.45, 0, 0.95);
+
+        // Atmospheric Mist
+        const mistDrift = (now * 0.015) % 1152;
+        ctx.save();
+        ctx.globalAlpha = 0.45;
+        const mistOff = (-(camOffset * 0.60) - mistDrift) % 1152;
+        for (let x = mistOff - 1152; x < viewW + 1152; x += 1152) {
+          if (bgImages.mist.complete && bgImages.mist.naturalWidth > 0) {
+            ctx.drawImage(bgImages.mist, x, 0, 1152, 648);
+          }
         }
         ctx.restore();
-      }
 
-      // Distant Mountains, Facility, Near Structures
-      drawParallax(bgImages.mountains, 0.08, 0, 0.90);
-      drawParallax(bgImages.facility, 0.22, 0, 0.95);
-      drawParallax(bgImages.near, 0.45, 0, 0.95);
-
-      // Atmospheric Mist with drift
-      const mistDrift = (now * 0.015) % 1152;
-      ctx.save();
-      ctx.globalAlpha = 0.45;
-      const mistOff = (-(cameraX * 0.60) - mistDrift) % 1152;
-      for (let x = mistOff - 1152; x < VW + 1152; x += 1152) {
-        if (bgImages.mist.complete && bgImages.mist.naturalWidth > 0) {
-          ctx.drawImage(bgImages.mist, x, 0, 1152, 648);
-        }
-      }
-      ctx.restore();
-
-      // Atmospheric Tint
-      if (gameMode === 'multiplayer') {
+        // Atmospheric Tint
         ctx.save();
-        ctx.fillStyle = 'rgba(139, 92, 246, 0.08)'; // Harmonic violet dimensional fusion
-        ctx.fillRect(0, 0, VW, VH);
+        ctx.fillStyle = activeReality === Reality.A ? 'rgba(6, 182, 212, 0.06)' : 'rgba(244, 63, 94, 0.07)';
+        ctx.fillRect(0, 0, viewW, viewH);
         ctx.restore();
-      } else if (realityBlend > 0.01) {
+
         ctx.save();
-        ctx.fillStyle = `rgba(244, 63, 94, ${realityBlend * 0.16})`;
-        ctx.fillRect(0, 0, VW, VH);
-        ctx.restore();
-      }
+        ctx.translate(-camOffset, 0);
 
-      ctx.save();
-      ctx.translate(-cameraX, 0);
-
-      // Tactical Grid
-      if (gameMode === 'multiplayer') {
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.05)';
+        // Tactical Grid
+        ctx.strokeStyle = activeReality === Reality.A ? 'rgba(6, 182, 212, 0.05)' : 'rgba(244, 63, 94, 0.05)';
         ctx.lineWidth = 1;
         for (let x = 0; x <= 3900; x += 64) {
-          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, VH); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, viewH); ctx.stroke();
         }
-      } else {
-        ctx.strokeStyle = currentReality === Reality.A ? 'rgba(6, 182, 212, 0.06)' : 'rgba(244, 63, 94, 0.06)';
-        ctx.lineWidth = 1;
-        for (let x = 0; x <= 3900; x += 64) {
-          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, VH); ctx.stroke();
+
+        // Hazard abyss floor line
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(0, 600); ctx.lineTo(3900, 600); ctx.stroke();
+
+        // Draw World Elements
+        for (const w of walls) w.draw(ctx);
+
+        // Draw Shiftable blocks from this reality's perspective
+        for (const s of shiftables) {
+          const b = s.getBounds();
+          const isThisReality = (s.reality === activeReality);
+          const blockIsActive = s.isActive();
+          const col = s.reality === Reality.A ? '#06b6d4' : '#f43f5e';
+          ctx.save();
+          if (isThisReality && blockIsActive) {
+            ctx.fillStyle = s.reality === Reality.A ? 'rgba(6, 182, 212, 0.28)' : 'rgba(244, 63, 94, 0.28)';
+            ctx.fillRect(b.left, b.top, s.w, s.h);
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 2.5;
+            ctx.strokeRect(b.left, b.top, s.w, s.h);
+
+            // Visual World Badge corner indicators
+            ctx.fillStyle = col;
+            ctx.fillRect(b.left, b.top, 8, 3);
+            ctx.fillRect(b.right - 8, b.top, 8, 3);
+
+            // Label
+            ctx.font = '700 9px JetBrains Mono, monospace';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = col;
+            ctx.fillText(s.reality === Reality.A ? 'WORLD A' : 'WORLD B', s.x, s.y + 3);
+          } else {
+            // Inactive or opposite-reality geometry remains visible as an outline.
+            ctx.fillStyle = isThisReality ? 'rgba(255, 255, 255, 0.015)' : 'rgba(255, 255, 255, 0.02)';
+            ctx.fillRect(b.left, b.top, s.w, s.h);
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = isThisReality
+              ? (col === '#06b6d4' ? 'rgba(6, 182, 212, 0.35)' : 'rgba(244, 63, 94, 0.35)')
+              : (col === '#06b6d4' ? 'rgba(6, 182, 212, 0.2)' : 'rgba(244, 63, 94, 0.2)');
+            ctx.lineWidth = 1.2;
+            ctx.strokeRect(b.left, b.top, s.w, s.h);
+            ctx.setLineDash([]);
+          }
+          ctx.restore();
         }
-      }
 
-      // Hazard abyss floor line
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
-      ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(0, 600); ctx.lineTo(3900, 600); ctx.stroke();
+        if (gameMode === 'multiplayer') {
+          for (const cs of coopSwitches) {
+            ctx.save();
+            if (cs.reality !== activeReality) ctx.globalAlpha = 0.45;
+            cs.draw(ctx);
+            ctx.restore();
+          }
+        }
 
-      // Draw World Elements
-      for (const w of walls) w.draw(ctx);
-      for (const s of shiftables) s.draw(ctx);
-      for (const cs of coopSwitches) cs.draw(ctx);
-      for (const d of doors) d.draw(ctx);
-      for (const m of mirrors) m.draw(ctx);
-      for (const r of receivers) r.draw(ctx);
-      for (const d of drones) d.draw(ctx);
+        for (const d of doors) {
+          if (d.reality === null || d.reality === activeReality) d.draw(ctx);
+        }
+        for (const m of mirrors) m.draw(ctx);
+        for (const r of receivers) r.draw(ctx);
+        for (const d of drones) d.draw(ctx);
 
-      // Safe Optical Laser (Cyan)
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)'; ctx.lineWidth = 8;
-      ctx.beginPath(); ctx.moveTo(opt.startX, opt.y); ctx.lineTo(optEndX, opt.y); ctx.stroke();
-      ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(opt.startX, opt.y); ctx.lineTo(optEndX, opt.y); ctx.stroke();
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(opt.startX, opt.y); ctx.lineTo(optEndX, opt.y); ctx.stroke();
-
-      if (optReflected) {
+        // Safe Optical Laser (Cyan)
         ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)'; ctx.lineWidth = 8;
-        ctx.beginPath(); ctx.moveTo(reflectionOrigin.x, reflectionOrigin.y); ctx.lineTo(reflectedEnd.x, reflectedEnd.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(opt.startX, opt.y); ctx.lineTo(optEndX, opt.y); ctx.stroke();
         ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(reflectionOrigin.x, reflectionOrigin.y); ctx.lineTo(reflectedEnd.x, reflectedEnd.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(opt.startX, opt.y); ctx.lineTo(optEndX, opt.y); ctx.stroke();
         ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(reflectionOrigin.x, reflectionOrigin.y); ctx.lineTo(reflectedEnd.x, reflectedEnd.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(opt.startX, opt.y); ctx.lineTo(optEndX, opt.y); ctx.stroke();
+
+        if (optReflected) {
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)'; ctx.lineWidth = 8;
+          ctx.beginPath(); ctx.moveTo(reflectionOrigin.x, reflectionOrigin.y); ctx.lineTo(reflectedEnd.x, reflectedEnd.y); ctx.stroke();
+          ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(reflectionOrigin.x, reflectionOrigin.y); ctx.lineTo(reflectedEnd.x, reflectedEnd.y); ctx.stroke();
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(reflectionOrigin.x, reflectionOrigin.y); ctx.lineTo(reflectedEnd.x, reflectedEnd.y); ctx.stroke();
+        }
+
+        // Lethal Burning Hazard Laser (Red)
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.35)'; ctx.lineWidth = 12;
+        ctx.beginPath(); ctx.moveTo(haz.startX, haz.y); ctx.lineTo(hazEndX, haz.y); ctx.stroke();
+        ctx.strokeStyle = '#f43f5e'; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.moveTo(haz.startX, haz.y); ctx.lineTo(hazEndX, haz.y); ctx.stroke();
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.8;
+        ctx.beginPath(); ctx.moveTo(haz.startX, haz.y); ctx.lineTo(hazEndX, haz.y); ctx.stroke();
+
+        for (let s = 0; s < 6; s++) {
+          const sx = haz.startX + (hazEndX - haz.startX) * ((s * 0.18 + now * 0.001) % 1);
+          const sy = haz.y + (Math.sin(s * 2 + now * 0.005)) * 3;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(sx, sy, 2, 2);
+        }
+
+        // Exit Terminal
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+        ctx.fillRect(3750, 420, 80, 110);
+        ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2;
+        ctx.strokeRect(3750, 420, 80, 110);
+        ctx.fillStyle = '#10b981'; ctx.font = '700 13px Outfit, sans-serif'; ctx.textAlign = 'center';
+        const exitReady = activeReality === Reality.A ? p1ExitReached : p2ExitReached;
+        ctx.fillStyle = exitReady ? '#f8fafc' : (activeReality === Reality.A ? '#06b6d4' : '#f43f5e');
+        ctx.fillText(gameMode === 'multiplayer'
+          ? (exitReady ? 'EXIT READY' : (activeReality === Reality.A ? 'P1 TRANSIT' : 'P2 TRANSIT'))
+          : 'CORE VAULT', 3790, 480);
+
+        // Draw Operatives
+        if (otherPlayer) {
+          ctx.save();
+          ctx.globalAlpha = 0.55;
+          otherPlayer.draw(ctx);
+          ctx.restore();
+        }
+        if (targetPlayer) {
+          targetPlayer.draw(ctx);
+        }
+
+        ctx.restore(); // restore (-camOffset, 0)
+
+        // Viewport Header Badge in Multiplayer
+        if (gameMode === 'multiplayer') {
+          ctx.save();
+          ctx.fillStyle = activeReality === Reality.A ? 'rgba(6, 182, 212, 0.18)' : 'rgba(244, 63, 94, 0.18)';
+          ctx.strokeStyle = activeReality === Reality.A ? '#06b6d4' : '#f43f5e';
+          ctx.lineWidth = 1.5;
+          const badgeW = 160;
+          const badgeH = 26;
+          const badgeX = 14;
+          const badgeY = 14;
+          ctx.beginPath();
+          ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+          ctx.fill();
+          ctx.stroke();
+
+          const dotX = badgeX + 14;
+          const dotY = badgeY + 13;
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 4.5, 0, Math.PI * 2);
+          ctx.fillStyle = activeReality === Reality.A ? '#06b6d4' : '#f43f5e';
+          ctx.fill();
+
+          ctx.fillStyle = activeReality === Reality.A ? '#38bdf8' : '#fb7185';
+          ctx.font = '800 11px Outfit, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(activeReality === Reality.A ? 'PLAYER 1 • WORLD A' : 'PLAYER 2 • WORLD B', dotX + 10, badgeY + 17);
+          ctx.restore();
+        }
+
+        ctx.restore(); // restore viewport clip & translation
       }
 
-      // Lethal Burning Hazard Laser (Red / Ruby with crackling sparks)
-      ctx.strokeStyle = 'rgba(244, 63, 94, 0.35)'; ctx.lineWidth = 12;
-      ctx.beginPath(); ctx.moveTo(haz.startX, haz.y); ctx.lineTo(hazEndX, haz.y); ctx.stroke();
-      ctx.strokeStyle = '#f43f5e'; ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.moveTo(haz.startX, haz.y); ctx.lineTo(hazEndX, haz.y); ctx.stroke();
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.8;
-      ctx.beginPath(); ctx.moveTo(haz.startX, haz.y); ctx.lineTo(hazEndX, haz.y); ctx.stroke();
-
-      const sparkCount = 6;
-      for (let s = 0; s < sparkCount; s++) {
-        const sx = haz.startX + (hazEndX - haz.startX) * ((s * 0.18 + now * 0.001) % 1);
-        const sy = haz.y + (Math.random() - 0.5) * 6;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(sx, sy, 2, 2);
-      }
-
-      // Exit Terminal
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
-      ctx.fillRect(3750, 420, 80, 110);
-      ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2;
-      ctx.strokeRect(3750, 420, 80, 110);
-      ctx.fillStyle = '#10b981'; ctx.font = '700 13px Outfit, sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('CORE VAULT', 3790, 480);
-
-      // Draw Operatives
+      // Render Execution
       if (gameMode === 'multiplayer') {
-        if (player1) player1.draw(ctx);
-        if (player2) player2.draw(ctx);
+        const HW = VW / 2; // 576
+
+        // Left Panel (Player 1 / World A)
+        renderViewport(0, 0, HW, VH, Reality.A, player1, player2, p1CameraX);
+
+        // Right Panel (Player 2 / World B)
+        renderViewport(HW, 0, HW, VH, Reality.B, player2, player1, p2CameraX);
+
+        // Animated dimensional seam between the two realities.
+        coopRiftPulse = Math.max(0, coopRiftPulse - dt * 0.0015);
+        ctx.save();
+        const seamGlow = 0.45 + 0.2 * Math.sin(now * 0.003) + coopRiftPulse * 0.35;
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.82)';
+        ctx.fillRect(HW - 6, 0, 12, VH);
+        ctx.shadowBlur = 12 + coopRiftPulse * 20;
+        ctx.shadowColor = '#06b6d4';
+        ctx.fillStyle = `rgba(6, 182, 212, ${seamGlow})`;
+        ctx.fillRect(HW - 2, 0, 1.5, VH);
+        ctx.shadowColor = '#f43f5e';
+        ctx.fillStyle = `rgba(244, 63, 94, ${seamGlow})`;
+        ctx.fillRect(HW + 0.5, 0, 1.5, VH);
+        if (coopRiftPulse > 0) {
+          const progress = 1 - coopRiftPulse;
+          const pulseRadius = 10 + progress * 92;
+          ctx.globalAlpha = coopRiftPulse * 0.9;
+          ctx.strokeStyle = coopRiftColor;
+          ctx.lineWidth = 4;
+          ctx.shadowColor = coopRiftColor;
+          ctx.shadowBlur = 18;
+          ctx.beginPath();
+          ctx.arc(HW, VH / 2, pulseRadius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha *= 0.55;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(HW, VH / 2, pulseRadius * 0.72, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        for (let particle = 0; particle < 12; particle++) {
+          const y = (now * (0.025 + particle * 0.001) + particle * 59) % VH;
+          const x = HW + Math.sin(now * 0.002 + particle * 1.7) * (2 + coopRiftPulse * 2);
+          ctx.fillStyle = particle % 2 === 0 ? 'rgba(6, 182, 212, 0.85)' : 'rgba(244, 63, 94, 0.85)';
+          ctx.fillRect(x, y, 2, 2);
+        }
+        ctx.shadowBlur = 0;
+        ctx.restore();
       } else {
-        if (player) player.draw(ctx);
+        // Single Player: Single full canvas pass
+        renderViewport(0, 0, VW, VH, currentReality, player, null, cameraX);
       }
 
-      ctx.restore();
       requestAnimationFrame(loop);
     }
 

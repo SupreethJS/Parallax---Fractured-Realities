@@ -533,12 +533,17 @@ func _clear_coop_links() -> void:
 func _create_viewport_container(container_name: String, player_index: int) -> SubViewportContainer:
 	var container := SubViewportContainer.new()
 	container.name = container_name
-	container.position = Vector2(player_index * 576, 0)
-	container.size = Vector2(576, 648)
+	var vp_size: Vector2 = get_viewport_rect().size
+	if vp_size.x <= 0.0 or vp_size.y <= 0.0:
+		vp_size = Vector2(1152, 648)
+	var half_w: float = vp_size.x * 0.5
+	var h: float = vp_size.y
+	container.position = Vector2(player_index * half_w, 0)
+	container.size = Vector2(half_w, h)
 	container.stretch = true
 	var sub_viewport := SubViewport.new()
 	sub_viewport.name = "SubViewport"
-	sub_viewport.size = Vector2i(576, 648)
+	sub_viewport.size = Vector2i(int(half_w), int(h))
 	sub_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	container.add_child(sub_viewport)
 	return container
