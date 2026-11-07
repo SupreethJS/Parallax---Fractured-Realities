@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Phone outline centered -->
+  <rect x="34" y="18" width="28" height="60" rx="6" fill="#0c1424" stroke="#08d2fa" stroke-width="2.5"/>
+  <circle cx="48" cy="71" r="2.5" fill="#08d2fa"/>
+  <rect x="42" y="22" width="12" height="2" rx="1" fill="#08d2fa" fill-opacity="0.6"/>
+  <!-- Curved rotation arrow -->
+  <path d="M 68 28 A 32 32 0 0 1 76 60" fill="none" stroke="#f43f5e" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 72 63 L 78 59 L 81 67 Z" fill="#f43f5e"/>
+</svg>

@@ -1,0 +1,72 @@
+[gd_scene format=3 uid="uid://d3yqtouchcontrols01"]
+
+[ext_resource type="Script" path="res://scenes/ui/touch_controls.gd" id="1_touch"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_left.svg" id="2_left"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_left_pressed.svg" id="3_left_p"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_right.svg" id="4_right"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_right_pressed.svg" id="5_right_p"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_jump.svg" id="6_jump"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_jump_pressed.svg" id="7_jump_p"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_shift.svg" id="8_shift"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_shift_pressed.svg" id="9_shift_p"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_interact.svg" id="10_interact"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_interact_pressed.svg" id="11_interact_p"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_pause.svg" id="12_pause"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_pause_pressed.svg" id="13_pause_p"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_fullscreen.svg" id="14_fs"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/btn_fullscreen_pressed.svg" id="15_fs_p"]
+
+[node name="TouchControls" type="CanvasLayer"]
+layer = 25
+script = ExtResource("1_touch")
+
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="MoveLeftBtn" type="TouchScreenButton" parent="Root"]
+position = Vector2(36, 532)
+texture_normal = ExtResource("2_left")
+texture_pressed = ExtResource("3_left_p")
+passby_press = true
+action = "move_left"
+
+[node name="MoveRightBtn" type="TouchScreenButton" parent="Root"]
+position = Vector2(136, 532)
+texture_normal = ExtResource("4_right")
+texture_pressed = ExtResource("5_right_p")
+passby_press = true
+action = "move_right"
+
+[node name="JumpBtn" type="TouchScreenButton" parent="Root"]
+position = Vector2(1016, 516)
+texture_normal = ExtResource("6_jump")
+texture_pressed = ExtResource("7_jump_p")
+action = "jump"
+
+[node name="ShiftBtn" type="TouchScreenButton" parent="Root"]
+position = Vector2(904, 528)
+texture_normal = ExtResource("8_shift")
+texture_pressed = ExtResource("9_shift_p")
+action = "switch_reality"
+
+[node name="InteractBtn" type="TouchScreenButton" parent="Root"]
+position = Vector2(960, 424)
+texture_normal = ExtResource("10_interact")
+texture_pressed = ExtResource("11_interact_p")
+action = "interact"
+
+[node name="PauseBtn" type="TouchScreenButton" parent="Root"]
+position = Vector2(1016, 16)
+texture_normal = ExtResource("12_pause")
+texture_pressed = ExtResource("13_pause_p")
+
+[node name="FullscreenBtn" type="TouchScreenButton" parent="Root"]
+position = Vector2(1080, 16)
+texture_normal = ExtResource("14_fs")
+texture_pressed = ExtResource("15_fs_p")

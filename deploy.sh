@@ -67,3 +67,4 @@ if [[ "$REMOTE_URL" =~ github\.com[:/]([^/]+)/([^/.]+)(\.git)? ]]; then
   echo "🎉 Deployment finished!"
   echo "🔗 Live GitHub Pages URL: https://${USER}.github.io/${REPO}/"
 fi
+

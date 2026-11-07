@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="84" height="84" viewBox="0 0 84 84">
+  <defs>
+    <linearGradient id="shiftGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#08d2fa"/>
+      <stop offset="100%" stop-color="#f43f5e"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="80" height="80" rx="18" fill="#0a101c" fill-opacity="0.75" stroke="url(#shiftGrad)" stroke-width="2.5"/>
+  <path d="M26 34 L58 34 M50 26 L58 34 L50 42" fill="none" stroke="#08d2fa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M58 50 L26 50 M34 42 L26 50 L34 58" fill="none" stroke="#f43f5e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="42" y="70" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="bold" font-size="10" fill="#f1f5f9" letter-spacing="1">SHIFT</text>
+</svg>

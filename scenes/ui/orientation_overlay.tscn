@@ -1,0 +1,77 @@
+[gd_scene format=3 uid="uid://b6yorientoverlay01"]
+
+[ext_resource type="Script" path="res://scenes/ui/orientation_overlay.gd" id="1_orient"]
+[ext_resource type="Texture2D" path="res://assets/ui/touch/icon_phone_rotate.svg" id="2_phone"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
+bg_color = Color(0.035, 0.05, 0.08, 0.96)
+
+[node name="OrientationOverlay" type="CanvasLayer"]
+layer = 100
+script = ExtResource("1_orient")
+
+[node name="Root" type="PanelContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_bg")
+
+[node name="Center" type="CenterContainer" parent="Root"]
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="Root/Center"]
+layout_mode = 2
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="PhoneGraphicContainer" type="Control" parent="Root/Center/VBox"]
+custom_minimum_size = Vector2(96, 96)
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="PhoneGraphic" type="TextureRect" parent="Root/Center/VBox/PhoneGraphicContainer"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -48.0
+offset_top = -48.0
+offset_right = 48.0
+offset_bottom = 48.0
+grow_horizontal = 2
+grow_vertical = 2
+pivot_offset = Vector2(48, 48)
+texture = ExtResource("2_phone")
+stretch_mode = 3
+
+[node name="Title" type="Label" parent="Root/Center/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.08, 0.82, 0.98, 1)
+theme_override_font_sizes/font_size = 22
+text = "PLEASE ROTATE YOUR DEVICE"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Root/Center/VBox"]
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.8, 0.9, 0.85)
+theme_override_font_sizes/font_size = 13
+text = "PARALLAX: FRACTURED REALITIES is optimized for landscape play."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="FullscreenBtn" type="Button" parent="Root/Center/VBox"]
+custom_minimum_size = Vector2(240, 44)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "⛶ ENTER FULLSCREEN"
+
+[node name="DismissBtn" type="Button" parent="Root/Center/VBox"]
+custom_minimum_size = Vector2(180, 36)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Continue Anyway"

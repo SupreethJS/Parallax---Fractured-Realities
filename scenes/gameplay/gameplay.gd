@@ -18,6 +18,7 @@ const PAUSE_SCENE: PackedScene = preload("res://scenes/ui/pause_menu.tscn")
 const SETTINGS_SCENE: PackedScene = preload("res://scenes/ui/settings_menu.tscn")
 const DEATH_SCENE: PackedScene = preload("res://scenes/ui/death_screen.tscn")
 const VICTORY_SCENE: PackedScene = preload("res://scenes/ui/victory_screen.tscn")
+const TOUCH_CONTROLS_SCENE: PackedScene = preload("res://scenes/ui/touch_controls.tscn")
 
 var backdrop: ParallaxBackdrop = null
 var current_stage: StageBase = null
@@ -27,6 +28,7 @@ var pause_menu: PauseMenu = null
 var settings_menu: SettingsMenu = null
 var death_screen: DeathScreen = null
 var victory_screen: VictoryScreen = null
+var touch_controls: TouchControls = null
 
 var stage_container: Node2D = null
 var stage_container2: Node2D = null
@@ -103,6 +105,10 @@ func _ready() -> void:
 	victory_screen.play_again_requested.connect(_restart_campaign)
 	victory_screen.main_menu_requested.connect(_return_to_main_menu)
 	ui_canvas.add_child(victory_screen)
+
+	touch_controls = TOUCH_CONTROLS_SCENE.instantiate() as TouchControls
+	touch_controls.pause_requested.connect(_toggle_pause)
+	ui_canvas.add_child(touch_controls)
 
 	# Hook RealityManager to count shifts
 	var rm: Node = get_node_or_null("/root/RealityManager")
@@ -295,6 +301,8 @@ func _on_stage_completed(next_stage: int, player_id: int = 0, source_stage: Stag
 		get_tree().paused = true
 		if hud:
 			hud.visible = false
+		if touch_controls:
+			touch_controls.visible = false
 		if victory_screen:
 			victory_screen.set_stats(campaign_timer, reality_shifts_count, death_count)
 			victory_screen.play_ending_sequence()
@@ -313,6 +321,8 @@ func _advance_after_stage_completed(next_stage: int) -> void:
 
 func _on_player_died(reason: String) -> void:
 	death_count += 1
+	if touch_controls:
+		touch_controls.visible = false
 	if is_multiplayer:
 		return
 	if death_screen:
@@ -322,10 +332,14 @@ func _on_player_died(reason: String) -> void:
 func _on_player_respawned() -> void:
 	if death_screen:
 		death_screen.visible = false
+	if touch_controls:
+		touch_controls._update_visibility()
 
 func _respawn_player() -> void:
 	if death_screen:
 		death_screen.visible = false
+	if touch_controls:
+		touch_controls._update_visibility()
 	if current_stage and player:
 		player.current_checkpoint = current_stage.active_checkpoint
 	if player and player.has_method("request_respawn"):
@@ -343,6 +357,11 @@ func _toggle_pause() -> void:
 	get_tree().paused = is_game_paused
 	if pause_menu:
 		pause_menu.visible = is_game_paused
+	if touch_controls:
+		if is_game_paused:
+			touch_controls.visible = false
+		else:
+			touch_controls._update_visibility()
 
 func _restart_current_stage() -> void:
 	_toggle_pause()
@@ -357,6 +376,8 @@ func _restart_campaign() -> void:
 	death_count = 0
 	if hud:
 		hud.visible = true
+	if touch_controls:
+		touch_controls._update_visibility()
 	if victory_screen:
 		victory_screen.reset_ending_sequence()
 	load_stage(1)

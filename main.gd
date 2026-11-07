@@ -9,6 +9,7 @@ const OPENING_INTRO_SCENE: PackedScene = preload("res://scenes/ui/opening_intro.
 const SETTINGS_SCENE: PackedScene = preload("res://scenes/ui/settings_menu.tscn")
 const GAMEPLAY_SCENE: PackedScene = preload("res://scenes/gameplay/gameplay.tscn")
 const BACKDROP_SCENE: PackedScene = preload("res://scenes/environment/parallax_backdrop.tscn")
+const ORIENTATION_OVERLAY_SCENE: PackedScene = preload("res://scenes/ui/orientation_overlay.tscn")
 
 var title_backdrop: ParallaxBackdrop = null
 var title_canvas: CanvasLayer = null
@@ -17,13 +18,19 @@ var settings_menu: SettingsMenu = null
 var opening_intro: OpeningIntro = null
 var active_gameplay: Gameplay = null
 var menu_camera: Camera2D = null
+var orientation_overlay: OrientationOverlay = null
 
 var _menu_pan_time: float = 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_setup_orientation_overlay()
 	_setup_title_screen()
 	_show_opening_intro()
+
+func _setup_orientation_overlay() -> void:
+	orientation_overlay = ORIENTATION_OVERLAY_SCENE.instantiate() as OrientationOverlay
+	add_child(orientation_overlay)
 
 func _process(delta: float) -> void:
 	# Subtle celestial pan during title menu

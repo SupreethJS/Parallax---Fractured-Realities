@@ -17,6 +17,10 @@ var _notification_fade_in_duration: float = 0.0
 var _notification_fade_out_duration: float = 0.0
 
 func _ready() -> void:
+	var bottom_hint: Node = get_node_or_null("Root/BottomHint")
+	if bottom_hint and (DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")):
+		bottom_hint.visible = false
+
 	var rm: Node = get_node_or_null("/root/RealityManager")
 	if rm:
 		if not rm.reality_changed.is_connected(_on_reality_changed):
@@ -24,6 +28,12 @@ func _ready() -> void:
 		if not rm.transition_pulse.is_connected(_on_transition_pulse):
 			rm.transition_pulse.connect(_on_transition_pulse)
 		update_reality_display(rm.current_reality)
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		var bottom_hint: Node = get_node_or_null("Root/BottomHint")
+		if bottom_hint and bottom_hint.visible:
+			bottom_hint.visible = false
 
 func _process(delta: float) -> void:
 	if _checkpoint_timer > 0.0:
