@@ -66,7 +66,7 @@ if ($status) {
 
 # 5. Push to main
 Write-Host "[4/5] Pushing main branch to origin..." -ForegroundColor Yellow
-git push origin main
+git push -u origin main
 if ($LASTEXITCODE -ne 0) {
     Write-Warning "Push to origin/main returned non-zero code. Check GitHub repository write permissions."
 } else {

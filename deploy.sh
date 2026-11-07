@@ -49,7 +49,7 @@ fi
 
 # 4. Push main
 echo "[4/5] Pushing main branch to origin..."
-git push origin main || echo "Warning: Push to origin/main returned non-zero code. Check GitHub repository write permissions."
+git push -u origin main || echo "Warning: Push to origin/main returned non-zero code. Check GitHub repository write permissions."
 
 # 5. Push subtree to gh-pages
 echo "[5/5] Pushing build/web subtree to origin/gh-pages..."

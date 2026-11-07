@@ -88,3 +88,4 @@ func _on_fullscreen_pressed() -> void:
 				}
 			})();
 		""")
+

@@ -70,3 +70,4 @@ texture_pressed = ExtResource("13_pause_p")
 position = Vector2(1080, 16)
 texture_normal = ExtResource("14_fs")
 texture_pressed = ExtResource("15_fs_p")
+

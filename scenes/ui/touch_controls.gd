@@ -79,3 +79,4 @@ func toggle_fullscreen() -> void:
 				}
 			})();
 		""")
+
