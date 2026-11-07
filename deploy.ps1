@@ -3,9 +3,9 @@ param(
     [string]$CommitMessage = "Update Godot web build for GitHub Pages"
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
-Write-Host "`n🚀 Starting RESPAWN: PARALLAX GitHub Pages Deployment...`n" -ForegroundColor Cyan
+Write-Host "`n>>> Starting RESPAWN: PARALLAX GitHub Pages Deployment...`n" -ForegroundColor Cyan
 
 # 1. Resolve Project Root
 $ProjectRoot = $PSScriptRoot
@@ -37,43 +37,44 @@ if (-not $GodotCmd) {
     exit 1
 }
 
-Write-Host "📦 Exporting Web release using: $GodotCmd" -ForegroundColor Yellow
+Write-Host "[1/5] Exporting Web release using: $GodotCmd" -ForegroundColor Yellow
 if (-not (Test-Path "build/web")) {
     New-Item -ItemType Directory -Path "build/web" -Force | Out-Null
 }
 
-& $GodotCmd --headless --path . --export-release "Web" "build/web/index.html"
+cmd /c "`"$GodotCmd`" --headless --path `"$ProjectRoot`" --export-release `"Web`" `"build/web/index.html`""
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Godot export failed with exit code $LASTEXITCODE."
     exit $LASTEXITCODE
 }
-Write-Host "✅ Godot Web export complete." -ForegroundColor Green
+Write-Host "[OK] Godot Web export complete." -ForegroundColor Green
 
 # 3. Ensure .nojekyll exists
 New-Item -Path "build/web/.nojekyll" -ItemType File -Force | Out-Null
-Write-Host "✅ Created build/web/.nojekyll" -ForegroundColor Green
+Write-Host "[OK] Verified build/web/.nojekyll" -ForegroundColor Green
 
 # 4. Git Stage and Commit
+Write-Host "[2/5] Staging changes..." -ForegroundColor Yellow
 git add -A
 $status = git status --porcelain
 if ($status) {
-    Write-Host "📝 Committing project and build files..." -ForegroundColor Yellow
+    Write-Host "[3/5] Committing project and build files..." -ForegroundColor Yellow
     git commit -m $CommitMessage
 } else {
-    Write-Host "ℹ️ No changes detected to commit." -ForegroundColor Cyan
+    Write-Host "[3/5] Working tree is clean, no new commit needed." -ForegroundColor Cyan
 }
 
 # 5. Push to main
-Write-Host "📤 Pushing main branch to origin..." -ForegroundColor Yellow
+Write-Host "[4/5] Pushing main branch to origin..." -ForegroundColor Yellow
 git push origin main
 if ($LASTEXITCODE -ne 0) {
-    Write-Warning "Push to origin main failed or returned non-zero code."
+    Write-Warning "Push to origin/main returned non-zero code. Check GitHub repository write permissions."
 } else {
-    Write-Host "✅ Pushed to origin/main successfully." -ForegroundColor Green
+    Write-Host "[OK] Pushed to origin/main successfully." -ForegroundColor Green
 }
 
 # 6. Push subtree to gh-pages
-Write-Host "🌐 Pushing build/web subtree to origin/gh-pages..." -ForegroundColor Yellow
+Write-Host "[5/5] Pushing build/web subtree to origin/gh-pages..." -ForegroundColor Yellow
 $subtreeSuccess = $false
 try {
     git subtree push --prefix build/web origin gh-pages
@@ -83,7 +84,7 @@ try {
 }
 
 if (-not $subtreeSuccess) {
-    Write-Host "Standard subtree push encountered an issue; executing fallback forced split push..." -ForegroundColor Yellow
+    Write-Host "Executing fallback subtree split push..." -ForegroundColor Yellow
     $splitOutput = (git subtree split --prefix build/web main)
     if ($splitOutput) {
         $splitId = $splitOutput.Trim()
@@ -100,9 +101,10 @@ if ($RemoteUrl -match "github\.com[:/]([^/]+)/([^/.]+)(\.git)?") {
     $RepoName = $matches[2]
 }
 
-Write-Host "`n🎉 Deployment finished!" -ForegroundColor Green
+Write-Host "`n=======================================================" -ForegroundColor Green
+Write-Host "   DEPLOYMENT PROCESS COMPLETE" -ForegroundColor Green
+Write-Host "=======================================================" -ForegroundColor Green
 if ($User -and $RepoName) {
     $PagesUrl = "https://$User.github.io/$RepoName/"
-    Write-Host "🔗 Live GitHub Pages URL: $PagesUrl" -ForegroundColor Cyan
+    Write-Host "`nLive GitHub Pages URL: $PagesUrl`n" -ForegroundColor Cyan
 }
-
